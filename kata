@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+# shell-kata host launcher: one command gives you an Ubuntu box with real systemd and the labs.
+# Must stay compatible with macOS bash 3.2.
+set -euo pipefail
+
+ROOT=$(cd "$(dirname "$0")" && pwd)
+NAME=${KATA_CONTAINER:-shell-kata}
+IMAGE=${KATA_IMAGE:-shell-kata:latest}
+VOLUME="$NAME-work"
+
+say() { printf '\033[36m==>\033[0m %s\n' "$*"; }
+die() { printf '\033[31merror:\033[0m %s\n' "$*" >&2; exit 1; }
+
+usage() {
+  cat <<EOF
+Usage: ./kata [command]
+
+  (no command)   build if needed, boot the box, open a shell inside it
+  up             build + boot only
+  down           stop the box (your work is kept)
+  rebuild        force an image rebuild, then boot
+  wipe           delete your work + progress (keeps the image)
+  nuke           remove container, volume and image
+  selftest [n]   prove every lab: setup -> check fails -> solution -> check passes
+  <anything>     forwarded to the in-box 'kata' (e.g. ./kata list, ./kata check 3)
+EOF
+}
+
+need_docker() {
+  command -v docker >/dev/null 2>&1 || die "docker not found. Install Docker Desktop or Docker Engine."
+  docker info >/dev/null 2>&1 || die "the docker daemon is not running (start Docker Desktop)."
+}
+
+image_hash() { cksum < "$ROOT/Dockerfile" | cut -d' ' -f1; }
+
+build() {
+  local want have
+  want=$(image_hash)
+  have=$(docker image inspect -f '{{ index .Config.Labels "kata.hash" }}' "$IMAGE" 2>/dev/null || true)
+  if [ "$want" != "$have" ] || [ "${1:-}" = force ]; then
+    say "building $IMAGE (first build takes about a minute)"
+    docker build --label "kata.hash=$want" -t "$IMAGE" "$ROOT"
+    docker rm -f "$NAME" >/dev/null 2>&1 || true
+  fi
+}
+
+running() { [ "$(docker container inspect -f '{{.State.Running}}' "$NAME" 2>/dev/null || true)" = true ]; }
+
+wait_boot() {
+  local state=""
+  for _ in $(seq 1 60); do
+    state=$(docker exec "$NAME" systemctl is-system-running 2>/dev/null || true)
+    case $state in running|degraded) return 0 ;; esac
+    sleep 0.5
+  done
+  die "systemd did not finish booting (state: ${state:-unknown}). Inspect with: docker logs $NAME"
+}
+
+up() {
+  need_docker
+  build "${1:-}"
+  running && return 0
+  if docker container inspect "$NAME" >/dev/null 2>&1; then
+    docker start "$NAME" >/dev/null
+  else
+    say "booting Ubuntu 24.04 with systemd as PID 1"
+    # --privileged is what lets systemd manage cgroups; the box is disposable, don't put secrets in it.
+    docker run -d --name "$NAME" --hostname kata \
+      --privileged --cgroupns=private \
+      --tmpfs /run --tmpfs /run/lock \
+      -v "$ROOT:/opt/kata:ro" \
+      -v "$VOLUME:/root/kata" \
+      "$IMAGE" >/dev/null
+  fi
+  wait_boot
+}
+
+in_box() {
+  local tty=-i
+  if [ -t 0 ] && [ -t 1 ]; then tty=-it; fi
+  docker exec $tty -e TERM="${TERM:-xterm-256color}" -w /root/kata "$NAME" "$@"
+}
+
+cmd=${1:-shell}
+case $cmd in
+  shell)        up; in_box bash -l ;;
+  up)           up; say "ready. Enter with: ./kata" ;;
+  down|stop)    need_docker; docker stop "$NAME" >/dev/null 2>&1 || true; say "stopped (work kept)" ;;
+  rebuild)      up force ;;
+  wipe)         need_docker; docker rm -f "$NAME" >/dev/null 2>&1 || true
+                docker volume rm "$VOLUME" >/dev/null 2>&1 || true; say "work and progress wiped" ;;
+  nuke|clean)   need_docker; docker rm -f "$NAME" >/dev/null 2>&1 || true
+                docker volume rm "$VOLUME" >/dev/null 2>&1 || true
+                docker image rm "$IMAGE" >/dev/null 2>&1 || true; say "container, volume and image removed" ;;
+  help|-h|--help) usage ;;
+  *)            up; in_box kata "$@" ;;
+esac

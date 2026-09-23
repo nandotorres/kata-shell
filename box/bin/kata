@@ -1,0 +1,332 @@
+#!/usr/bin/env bash
+# kata: in-box driver for the shell interview labs.
+set -uo pipefail
+shopt -s nullglob
+
+KATA_ROOT=${KATA_ROOT:-/opt/kata}
+LABS_DIR=$KATA_ROOT/labs
+WORK_ROOT=${KATA_WORK_ROOT:-$HOME/kata}
+STATE_DIR=$HOME/kata/.kata
+RUN_DIR=/run/kata
+mkdir -p "$STATE_DIR" "$WORK_ROOT" "$RUN_DIR"
+
+if [[ -t 1 ]]; then
+  B=$'\e[1m' D=$'\e[2m' R=$'\e[31m' G=$'\e[32m' Y=$'\e[33m' C=$'\e[36m' N=$'\e[0m'
+else
+  B='' D='' R='' G='' Y='' C='' N=''
+fi
+
+die() { printf '%serror:%s %s\n' "$R" "$N" "$*" >&2; exit 1; }
+
+lab_ids() {
+  local d
+  for d in "$LABS_DIR"/[0-9][0-9]-*/; do d=${d%/}; printf '%s\n' "${d##*/}"; done
+}
+
+resolve() {
+  local q=${1:-} id
+  if [[ -z $q ]]; then
+    [[ -s $STATE_DIR/current ]] || die "no current lab. Run: kata start <n>"
+    q=$(<"$STATE_DIR/current")
+  fi
+  [[ $q =~ ^[0-9]+$ ]] && q=$(printf '%02d' "$((10#$q))")
+  for id in $(lab_ids); do
+    if [[ $id == "$q" || $id == "$q"-* || $id == *-"$q"* ]]; then printf '%s\n' "$id"; return 0; fi
+  done
+  die "no lab matches '$q' (see: kata list)"
+}
+
+readme()  { printf '%s/%s/README.md' "$LABS_DIR" "$1"; }
+title()   { sed -n '1s/^# *//p' "$(readme "$1")"; }
+meta()    { sed -n 's/^> //p' "$(readme "$1")" | head -n1; }
+track()   { meta "$1" | sed -n 's/^Track: *\([^·]*\).*/\1/p' | sed 's/ *$//'; }
+section() { awk -v s="$2" '/^## /{p = ($0 == "## " s); next} p' "$(readme "$1")"; }
+work()    { printf '%s/%s' "$WORK_ROOT" "$1"; }
+is_done() { grep -qx "$1" "$STATE_DIR/done" 2>/dev/null; }
+mark_done() { is_done "$1" || printf '%s\n' "$1" >> "$STATE_DIR/done"; }
+
+heading() { printf '\n%s%s%s\n' "$B$Y" "$1" "$N"; }
+
+have_glow() { [[ -t 1 ]] && command -v glow >/dev/null; }
+
+# render: markdown on stdin -> glow when interactive, light highlighting otherwise
+render() {
+  if have_glow; then glow -s dark -w "$(( $(tput cols 2>/dev/null || echo 100) - 4 ))" -
+  else awk -v B="$B$Y" -v C="$C" -v N="$N" '
+      /^```/   { fence = !fence; next }
+      fence    { print "    " $0; next }
+      /^#+ /   { sub(/^#+ /, ""); print B $0 N; next }
+               { gsub(/`[^`]*`/, C "&" N); gsub(/`|\*\*/, ""); print }'
+  fi
+}
+
+# page FILE: full document in a scrollable pager
+page() {
+  if have_glow; then glow -s dark -p "$1"; else less -R "$1"; fi
+}
+
+lab_env() {
+  export KATA_ROOT KATA_LAB="$LABS_DIR/$1" KATA_WORK; KATA_WORK=$(work "$1")
+  export KATA_RUN="$RUN_DIR" KATA_LIB="$KATA_ROOT/box/lib"
+}
+
+run_lab_script() { # id script cwd
+  local id=$1 script=$LABS_DIR/$1/$2
+  [[ -f $script ]] || return 0
+  # solutions run like typed at a prompt (no errexit); setup scripts run strict
+  local opts=(-euo pipefail)
+  [[ $2 == solution.sh ]] && opts=()
+  ( lab_env "$id"; cd "$3" && bash "${opts[@]}" "$script" )
+}
+
+teardown_lab() {
+  local id=$1
+  ( lab_env "$id"; cd / && bash "$LABS_DIR/$id/teardown.sh" ) >/dev/null 2>&1 || true
+  rm -rf -- "$(work "$id")"
+}
+
+setup_lab() {
+  local id=$1 w
+  w=$(work "$id")
+  teardown_lab "$id"
+  mkdir -p "$w"
+  run_lab_script "$id" setup.sh "$w" || die "setup of $id failed"
+}
+
+run_check() {
+  local id=$1 w
+  w=$(work "$id")
+  [[ -d $w ]] || die "lab $id is not started. Run: kata start ${id%%-*}"
+  ( lab_env "$id"; cd "$w" && bash -c 'source "$1"; source "$2"; finish' _ \
+      "$KATA_ROOT/box/lib/check.sh" "$LABS_DIR/$id/check.sh" )
+}
+
+want_cd() { [[ -n ${KATA_WANT_CD:-} ]] && printf '%s\n' "$1" > "$STATE_DIR/cd"; }
+
+# ---------- commands ----------
+
+cmd_list() {
+  local id cur last="" t mark n=0 total=0
+  cur=$(cat "$STATE_DIR/current" 2>/dev/null || true)
+  for id in $(lab_ids); do
+    t=$(track "$id")
+    [[ $t != "$last" ]] && { printf '\n%s%s%s\n' "$B" "$t" "$N"; last=$t; }
+    if is_done "$id"; then mark="$G✔$N"; n=$((n + 1))
+    elif [[ $id == "$cur" ]]; then mark="$Y▶$N"
+    else mark="$D·$N"; fi
+    total=$((total + 1))
+    printf '  %s %s  %s\n' "$mark" "${id%%-*}" "$(title "$id")"
+  done
+  printf '\n%d/%d solved. Start with: %skata start <n>%s  or  %skata next%s\n' "$n" "$total" "$C" "$N" "$C" "$N"
+}
+
+cmd_show() {
+  local id; id=$(resolve "${1:-}") || exit 1
+  {
+    printf '# %s\n\n*%s*\n' "$(title "$id")" "$(meta "$id")"
+    printf '\n## Statement\n';     section "$id" "Statement"
+    printf '\n## Current state\n'; section "$id" "Current state"
+    printf '\n## Done when\n';     section "$id" "Done when"
+  } | render
+  printf '\n%sWork dir:%s %s\n' "$D" "$N" "$(work "$id")"
+  printf '%skata state · kata hint · kata check · kata solution · kata reset%s\n' "$D" "$N"
+}
+
+cmd_state() {
+  local id w; id=$(resolve "${1:-}") || exit 1
+  w=$(work "$id")
+  { printf '## Current state (as set up)\n'; section "$id" "Current state"; } | render
+  if [[ -d $w ]]; then
+    heading "Files in $w right now"
+    tree -a -I '.svc' --noreport -L 3 -- "$w"
+  else
+    printf '\n(not started — kata start %s)\n' "${id%%-*}"
+  fi
+}
+
+cmd_start() {
+  local id; id=$(resolve "${1:-}") || exit 1
+  setup_lab "$id"
+  printf '%s\n' "$id" > "$STATE_DIR/current"
+  want_cd "$(work "$id")"
+  cmd_show "$id"
+}
+
+cmd_reset() {
+  local id; id=$(resolve "${1:-}") || exit 1
+  setup_lab "$id"
+  want_cd "$(work "$id")"
+  printf '%s is back to its starting state.\n' "$id"
+}
+
+cmd_stop() {
+  local id; id=$(resolve "${1:-}") || exit 1
+  teardown_lab "$id"
+  [[ $(cat "$STATE_DIR/current" 2>/dev/null) == "$id" ]] && rm -f "$STATE_DIR/current"
+  want_cd "$WORK_ROOT"
+  printf 'Tore down %s.\n' "$id"
+}
+
+cmd_hint() {
+  local id; id=$(resolve "${1:-}") || exit 1
+  { printf '## Hint: %s\n' "$(title "$id")"; section "$id" "Hint"; } | render
+}
+
+cmd_check() {
+  local id; id=$(resolve "${1:-}") || exit 1
+  printf '%sChecking %s%s\n' "$B" "$(title "$id")" "$N"
+  if run_check "$id"; then
+    mark_done "$id"
+    printf '\n%s%sPASS%s\n' "$B" "$G" "$N"
+    { printf '## Key idea\n'; section "$id" "Key idea"; } | render
+    printf '\n%sCompare with the reference: kata solution · Next: kata next%s\n' "$D" "$N"
+  else
+    printf '\n%s%sNOT YET%s  %s(lines marked - are expected, + are yours)%s\n' "$B" "$R" "$N" "$D" "$N"
+    printf '%skata hint · kata state · kata reset · kata solution%s\n' "$D" "$N"
+    return 1
+  fi
+}
+
+cmd_solution() {
+  local id apply=0 arg rest=()
+  for arg in "$@"; do if [[ $arg == --apply ]]; then apply=1; else rest+=("$arg"); fi; done
+  id=$(resolve "${rest[0]:-}") || exit 1
+  {
+    printf '## Reference solution: %s\n\n```bash\n' "$(title "$id")"
+    cat "$LABS_DIR/$id/solution.sh"
+    printf '```\n\n## Key idea\n'; section "$id" "Key idea"
+    local deep; deep=$(section "$id" "Deep dive")
+    [[ -n $deep ]] && printf '\n## Deep dive\n%s\n' "$deep"
+  } | render
+  if (( apply )); then
+    [[ -d $(work "$id") ]] || setup_lab "$id"
+    run_lab_script "$id" solution.sh "$(work "$id")" && printf '\n%sApplied. Run kata check to confirm.%s\n' "$G" "$N"
+  else
+    printf '\n%sRun it for real with: kata solution %s --apply%s\n' "$D" "${id%%-*}" "$N"
+  fi
+}
+
+cmd_next() {
+  local id
+  for id in $(lab_ids); do is_done "$id" || { cmd_start "$id"; return; }; done
+  printf 'All labs solved. Try: kata random (re-run any lab) or kata selftest.\n'
+}
+
+cmd_random() {
+  local pool
+  pool=$(for id in $(lab_ids); do is_done "$id" || printf '%s\n' "$id"; done)
+  [[ -n $pool ]] || pool=$(lab_ids)
+  cmd_start "$(shuf -n1 <<< "$pool")"
+}
+
+cmd_progress() {
+  local total done_n
+  total=$(lab_ids | wc -l)
+  done_n=$(sort -u "$STATE_DIR/done" 2>/dev/null | wc -l)
+  printf '%d/%d labs solved\n' "$done_n" "$total"
+}
+
+search_doc() { # file query
+  local out
+  # a matching heading prints its whole section, including deeper sub-headings
+  out=$(awk -v q="$2" '
+    /^```/ { fence = !fence }
+    !fence && /^#+ / {
+      lvl = match($0, /[^#]/) - 1
+      if (p && lvl > plvl) { print; next }
+      p = lvl > 1 && index(tolower($0), tolower(q)) > 0
+      if (p) plvl = lvl
+    }
+    p' "$1")
+  if [[ -n $out ]]; then printf '%s\n' "$out" | render
+  else grep -i -n --color=auto -- "$2" "$1" || printf 'nothing about "%s" — try: kata cheat\n' "$2"; fi
+}
+
+cmd_cheat() {
+  local f=$KATA_ROOT/docs/ts-to-bash.md
+  if (( $# == 0 )); then page "$f"; else search_doc "$f" "$*"; fi
+}
+
+cmd_docs() {
+  local f=$KATA_ROOT/docs/fundamentals.md
+  if (( $# == 0 )); then page "$f"; else search_doc "$f" "$*"; fi
+}
+
+cmd_read() {
+  local id; id=$(resolve "${1:-}") || exit 1
+  page "$(readme "$id")"
+}
+
+cmd_selftest() {
+  local ids id ok=0 bad=0 log
+  export KATA_WORK_ROOT=/tmp/kata-selftest
+  WORK_ROOT=$KATA_WORK_ROOT
+  if (( $# )); then ids=$(for a in "$@"; do resolve "$a" || exit 1; done); else ids=$(lab_ids); fi
+  for id in $ids; do
+    log=$(mktemp)
+    printf '%-26s ' "$id"
+    if ! setup_lab "$id" >"$log" 2>&1; then
+      printf '%sFAIL%s setup\n' "$R" "$N"; cat "$log"; bad=$((bad + 1)); continue
+    fi
+    if run_check "$id" >"$log" 2>&1; then
+      printf '%sFAIL%s check passes before solving\n' "$R" "$N"; bad=$((bad + 1)); teardown_lab "$id"; continue
+    fi
+    if ! run_lab_script "$id" solution.sh "$(work "$id")" >"$log" 2>&1; then
+      printf '%sFAIL%s solution errored\n' "$R" "$N"; sed 's/^/    /' "$log"; bad=$((bad + 1)); teardown_lab "$id"; continue
+    fi
+    if run_check "$id" >"$log" 2>&1; then
+      printf '%sok%s\n' "$G" "$N"; ok=$((ok + 1))
+    else
+      printf '%sFAIL%s check fails after solution\n' "$R" "$N"; sed 's/^/    /' "$log"; bad=$((bad + 1))
+    fi
+    teardown_lab "$id"
+    rm -f "$log"
+  done
+  printf '\n%d ok, %d failed\n' "$ok" "$bad"
+  (( bad == 0 ))
+}
+
+cmd_help() {
+  cat <<EOF
+${B}kata${N} — shell interview labs
+
+  ${C}kata list${N}              all labs, grouped by track, with progress
+  ${C}kata start <n>${N}         set up lab n (fresh state) and cd into it
+  ${C}kata next${N} / ${C}random${N}     start the next unsolved / a random unsolved lab
+  ${C}kata show${N}              statement, current state, acceptance criteria
+  ${C}kata read${N}              the whole lab sheet in a pager (includes hint + deep dive)
+  ${C}kata state${N}             what the lab looks like now (files, tree)
+  ${C}kata hint${N}              a nudge, not the answer
+  ${C}kata check${N}             verify; shows expected-vs-yours diff on failure
+  ${C}kata solution [--apply]${N}  reference solution + key idea (+ run it)
+  ${C}kata reset${N} / ${C}stop${N}      restore the starting state / tear down
+  ${C}kata cheat [word]${N}      TypeScript -> Bash cheat sheet (e.g. kata cheat split)
+  ${C}kata docs [word]${N}       fundamentals: processes, pipes, fds, trap, systemd...
+  ${C}kata progress${N}          solved count
+  ${C}kata selftest [n]${N}      prove labs are solvable and checks are honest
+
+<n> can be 7, 07, or part of the name (kata start trap). Commands default to the current lab.
+EOF
+}
+
+cmd=${1:-help}; shift || true
+case $cmd in
+  list|ls)        cmd_list ;;
+  start)          cmd_start "$@" ;;
+  show|statement) cmd_show "$@" ;;
+  read)           cmd_read "$@" ;;
+  state|status)   cmd_state "$@" ;;
+  hint)           cmd_hint "$@" ;;
+  check|compare)  cmd_check "$@" ;;
+  solution|solve) cmd_solution "$@" ;;
+  reset)          cmd_reset "$@" ;;
+  stop|teardown)  cmd_stop "$@" ;;
+  next)           cmd_next ;;
+  random)         cmd_random ;;
+  progress)       cmd_progress ;;
+  cheat)          cmd_cheat "$@" ;;
+  docs)           cmd_docs "$@" ;;
+  selftest)       cmd_selftest "$@" ;;
+  help|-h|--help) cmd_help ;;
+  *)              die "unknown command '$cmd' (kata help)" ;;
+esac

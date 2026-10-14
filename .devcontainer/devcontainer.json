@@ -1,0 +1,33 @@
+{
+  "name": "shell-kata",
+  "build": { "dockerfile": "../Dockerfile", "context": ".." },
+
+  // systemd must be PID 1: keep the image's CMD (/sbin/init), no tini, privileged cgroups.
+  "overrideCommand": false,
+  "init": false,
+  "privileged": true,
+  "runArgs": ["--hostname=kata", "--cgroupns=private", "--tmpfs=/run", "--tmpfs=/run/lock"],
+  "shutdownAction": "stopContainer",
+  "remoteUser": "root",
+
+  // Lab sources are read-only at /opt/kata; your work + progress live in a volume that is the workspace.
+  "mounts": ["source=${localWorkspaceFolder},target=/opt/kata,type=bind,readonly"],
+  "workspaceMount": "source=shell-kata-work,target=/root/kata,type=volume",
+  "workspaceFolder": "/root/kata",
+
+  "postStartCommand": "ln -sfn /opt/kata/labs /root/kata/labs && ln -sfn /opt/kata/docs /root/kata/docs && ln -sfn /opt/kata/README.md /root/kata/README.md",
+
+  "customizations": {
+    "vscode": {
+      "settings": {
+        "terminal.integrated.defaultProfile.linux": "bash",
+        "files.exclude": { "**/.kata": true, "**/.svc": true },
+        "workbench.editorAssociations": {
+          "**/labs/**/*.md": "vscode.markdown.preview.editor",
+          "**/docs/*.md": "vscode.markdown.preview.editor"
+        }
+      },
+      "extensions": ["timonwong.shellcheck", "mads-hartmann.bash-ide-vscode"]
+    }
+  }
+}

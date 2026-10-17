@@ -24,5 +24,5 @@ sed applies `address + command` to each line (`s` substitutes, `d` deletes), `-i
 ## Deep dive
 - Address forms: `/regex/`, line number `3`, range `/start/,/end/`, negation `/re/!d`.
 - `sed -n '/re/p'` behaves like grep. `sed -E` enables `+ ? | ()` without backslashes.
-- GNU vs BSD: macOS needs `sed -i ''`. Interviewers love that one.
+- GNU vs BSD: macOS needs `sed -i ''`. A script that runs on both has to account for that.
 - For changing a value whatever it currently is: `sed -i 's/^\(port=\).*/\18080/' app.conf`.

@@ -25,6 +25,6 @@ public_ports=<TCP ports bound to 0.0.0.0, ascending, space separated>
 ## Deep dive
 - `ss -tanp state established` shows live connections. `ss -s` gives a summary.
 - `lsof -iTCP:8081 -sTCP:LISTEN` is the lsof equivalent. `fuser 8081/tcp` gives just the PID.
-- `netstat -tulpn` is the legacy tool, still asked about in interviews.
+- `netstat -tulpn` is the older tool. It is still what you get on hosts that do not have `ss`.
 - No `-p` output? You need root to see other users' processes.
 - Test a port without a client: `nc -zv 127.0.0.1 8081`, or Bash's `exec 3<>/dev/tcp/127.0.0.1/8081`.

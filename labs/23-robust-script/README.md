@@ -1,8 +1,8 @@
-# Write an interview-grade script
+# Write a backup script you can trust
 > Track: Scripting · Level ★★★ · ~20 min
 
 ## Statement
-The classic take-home: write `backup.sh SRC DEST_DIR` that behaves like a real Unix tool.
+Write `backup.sh SRC DEST_DIR` so it behaves like a real Unix tool.
 - Wrong number of arguments: print `usage: backup.sh SRC DEST_DIR` to **stderr** and exit **2**.
 - `SRC` is not a directory: print an error to **stderr**, exit **1**, create nothing.
 - Otherwise: create `DEST_DIR` if needed and write `DEST_DIR/<basename of SRC>-<YYYYMMDD>.tar.gz` containing the
@@ -28,5 +28,5 @@ A robust script validates its inputs first, quotes every expansion, reports erro
 - `"$@"` forwards args intact, while `$*` and unquoted `$@` re-split them.
 - `--` ends option parsing: `rm -- "$f"` is safe even if `$f` is `-rf`.
 - `readonly`, `local`, and `main "$@"` at the bottom make longer scripts testable.
-- `getopts` handles `-v -o file` style flags. Mention it even if you don't use it.
-- `shellcheck` catches most quoting bugs before the interviewer does.
+- `getopts` handles `-v -o file` style flags when a script needs them.
+- `shellcheck` catches most quoting bugs before the script runs anywhere else.

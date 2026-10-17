@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# kata: in-box driver for the shell interview labs.
+# kata: in-box driver for the shell labs.
 set -uo pipefail
 shopt -s nullglob
 
@@ -288,7 +288,7 @@ cmd_selftest() {
 
 cmd_help() {
   cat <<EOF
-${B}kata${N} — shell interview labs
+${B}kata${N} — shell practice labs
 
   ${C}kata list${N}              all labs, grouped by track, with progress
   ${C}kata start <n>${N}         set up lab n (fresh state) and cd into it

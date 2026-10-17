@@ -24,4 +24,4 @@ To count files safely you can't count *lines*, because one name contains a newli
 - `-mtime +7` means "more than 7 full 24h periods ago", so effectively 8 days or more. `-mmin -30` means modified in the last 30 minutes.
 - `find … | xargs rm` breaks on spaces. `find … -print0 | xargs -0 rm --` is safe. `-exec rm -- {} +` batches like xargs.
 - `-delete` implies `-depth`. Always put it **last**: `find . -delete -name x` deletes everything.
-- Dry run first: in interviews say "I'd run it with `-print` first".
+- Dry run first: run the same `find` with `-print`, then add `-delete`.

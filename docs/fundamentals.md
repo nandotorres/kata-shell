@@ -1,4 +1,4 @@
-# Unix fundamentals for shell interviews
+# Unix fundamentals
 
 `kata docs <word>` prints only matching sections (e.g. `kata docs trap`, `kata docs systemd`, `kata docs tee`).
 Each section ends with the lab that makes you practise it.
@@ -54,7 +54,7 @@ kill -0 PID         # exists? (sends nothing)
 kill -9 PID         # only after TERM failed
 pkill -f pattern ; killall name
 ```
-Escalation for interviews: TERM, wait a few seconds, then KILL. Say *why*: TERM lets the process flush buffers, remove PID/lock files and close connections.
+Stop with TERM, wait a few seconds, then KILL. TERM lets the process flush buffers, remove PID/lock files and close connections.
 
 Practice: lab 15, lab 16.
 
@@ -151,7 +151,7 @@ Practice: lab 17.
 | `tee` | stdin | stdout **and** files | no | saving a copy mid-pipeline, `sudo tee` to write root files |
 | `head`/`tail` | file/stdin | stdout | no | first/last N lines. `tail -f` follows a growing log |
 
-- "Useless use of cat": `cat f | grep x` is `grep x f`. It's harmless, but interviewers notice.
+- "Useless use of cat": `cat f | grep x` is `grep x f`. The pipe starts a process that `grep` does not need.
 - `cat` is *right* for concatenating (`cat a b > c`) and for `cat -A`/`cat -n`.
 - `less +F file` follows like `tail -f` and Ctrl-C drops back to scrolling. `less -S` doesn't wrap long lines. `less -R` keeps colors.
 - `sudo echo x > /root/f` fails because **your** shell opens the file before sudo runs, so use `echo x | sudo tee /root/f`.
@@ -232,7 +232,7 @@ journalctl -b                        # this boot
 systemd-analyze blame                # slow boot culprits
 ```
 
-**Facts interviewers probe**:
+**Worth remembering**:
 - `enable` ≠ `start`. `enable` creates a symlink in `<target>.wants/` and doesn't start anything without `--now`.
 - `After=` is ordering only. `Requires=`/`Wants=` pull a dependency in, so you usually need both.
 - `Restart=on-failure` restarts on non-zero exit, signal or timeout. `always` also restarts on a clean exit.
@@ -245,7 +245,7 @@ Practice: lab 20, lab 21, lab 22.
 
 ---
 
-## Interview quick-fire
+## How it actually works
 
 **What happens when you type `ls -l | grep foo` and press Enter?**
 The shell parses the line, creates a pipe, forks twice, and wires child 1's stdout to the pipe's write end and child 2's stdin to the read end. Each child execs its program (found via `$PATH`), and the shell waits for both and sets `$?` from the last one.

@@ -1,6 +1,6 @@
 # shell-kata
 
-A local, Katacoda-style trainer for **shell / Linux interviews**: a real Ubuntu 24.04 box with **systemd as PID 1**,
+A local, Katacoda-style lab for the **Unix shell**: a real Ubuntu 24.04 box with **systemd as PID 1**,
 24 hands-on labs with setup, teardown, live state, automatic checks with expected-vs-yours diffs, reference
 solutions and a one-sentence key idea, plus a TypeScript → Bash cheat sheet and a fundamentals guide.
 
@@ -51,7 +51,7 @@ From the host, `./kata <cmd>` forwards to the box (`./kata list`, `./kata check 
 | Streams & pipes | 11 stdout/stderr/exit codes · 12 `pipefail` · 13 `tee` · 14 pipe subshell + missing last newline |
 | Processes & signals | 15 find + SIGTERM the CPU hog · 16 `trap` graceful shutdown · 17 parallel jobs + `wait` · 18 `ss -ltnp` · 19 deleted-but-open file |
 | systemd | 20 write a service with restart-on-crash · 21 debug a failed unit via journal · 22 cron → timer |
-| Scripting | 23 interview-grade script (exit codes, quoting, shellcheck) · 24 jq |
+| Scripting | 23 a backup script that fails safely (exit codes, quoting, shellcheck) · 24 jq |
 
 Every lab is a folder: `README.md` (statement / current state / done when / hint / key idea / deep dive),
 `setup.sh`, `check.sh`, `solution.sh`, and optionally `teardown.sh`. Checks run real behaviour: they `kill -9` your

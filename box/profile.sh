@@ -2,6 +2,16 @@
 # Interactive-shell setup for the kata box (sourced from /root/.bashrc).
 [[ $- == *i* ]] || return 0
 
+# Ghostty (and other new terminals) set TERM to a name Ubuntu's ncurses does not ship.
+# Compile the bundled description once; otherwise fall back so clear/less still work.
+if [[ -n ${TERM:-} ]] && ! infocmp -x "$TERM" >/dev/null 2>&1; then
+  src=/opt/kata/box/terminfo/${TERM}.ti
+  if [[ -f $src ]]; then
+    tic -x -o "$HOME/.terminfo" "$src" >/dev/null 2>&1 || true
+  fi
+  infocmp -x "$TERM" >/dev/null 2>&1 || export TERM=xterm-256color
+fi
+
 # Wrapper so `kata start` / `kata reset` can cd your shell into the lab dir.
 kata() {
   KATA_WANT_CD=1 command kata "$@"

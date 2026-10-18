@@ -1,5 +1,11 @@
 # shell-kata
 
+## Quick start
+
+![Read the statement, fail the check, take the hint, fix it, pass, and move on](docs/quickstart.gif)
+
+The loop, about 20 seconds: read the statement, try an answer, `kata check` (it fails), `kata hint`, fix it, `kata check` again, then `kata next`. The recording is [`docs/quickstart.cast`](docs/quickstart.cast); play it with `asciinema play docs/quickstart.cast`.
+
 A local, Katacoda-style lab for the **Unix shell**: a real Ubuntu 24.04 box with **systemd as PID 1**,
 24 hands-on labs with setup, teardown, live state, automatic checks with expected-vs-yours diffs, reference
 solutions and a one-sentence key idea, plus a TypeScript → Bash cheat sheet and a fundamentals guide.

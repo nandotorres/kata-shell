@@ -10,8 +10,9 @@
   "shutdownAction": "stopContainer",
   "remoteUser": "root",
 
-  // Lab sources are read-only at /opt/kata; your work + progress live in a volume that is the workspace.
-  "mounts": ["source=${localWorkspaceFolder},target=/opt/kata,type=bind,readonly"],
+  // Lab sources are baked into the image at /opt/kata (COPY . /opt/kata) so this works
+  // in GitHub Codespaces, which cannot bind-mount the local checkout. Your work + progress
+  // live in a volume that is the workspace.
   "workspaceMount": "source=shell-kata-work,target=/root/kata,type=volume",
   "workspaceFolder": "/root/kata",
 

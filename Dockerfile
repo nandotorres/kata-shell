@@ -21,6 +21,11 @@ RUN apt-get update \
  && ln -s /opt/kata/box/bin/kata /usr/local/bin/kata \
  && echo '[ -r /opt/kata/box/profile.sh ] && . /opt/kata/box/profile.sh' >> /root/.bashrc
 
+# Bake the lab sources into the image so /opt/kata always exists.
+# Local use (./kata launcher) overlays a live, read-only bind mount on top;
+# GitHub Codespaces, which cannot bind-mount the checkout, uses this baked copy.
+COPY . /opt/kata
+
 # systemd expects this signal to shut down cleanly
 STOPSIGNAL SIGRTMIN+3
 WORKDIR /root/kata

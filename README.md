@@ -10,6 +10,16 @@ solutions and a one-sentence key idea, plus a TypeScript → Bash cheat sheet an
 
 ## Start
 
+**GitHub Codespaces (no clone, zero local setup):** click **Code ▸ Codespaces ▸ Create codespace** on GitHub.
+It builds the dev container in the cloud and drops you into the box in your browser (or VS Code) — nothing to
+install, nothing to clone. Then in the integrated terminal:
+
+```bash
+kata next
+```
+
+The lab sources are baked into the image, so Codespaces works even though it can't bind-mount a local checkout.
+
 **Cursor / VS Code (recommended):** open this folder, run **"Dev Containers: Reopen in Container"**, then in the integrated terminal:
 
 ```bash
